@@ -14,16 +14,14 @@ NEWSPIDER_MODULE = "beauty_helper.spiders"
 
 ADDONS = {}
 
-
-# Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "beauty_helper (+http://www.yourdomain.com)"
+# Crawler settings
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
 
 # Obey robots.txt rules
 ROBOTSTXT_OBEY = True
 
 # Concurrency and throttling settings
-#CONCURRENT_REQUESTS = 16
-CONCURRENT_REQUESTS_PER_DOMAIN = 1
+CONCURRENT_REQUESTS_PER_DOMAIN = 2
 DOWNLOAD_DELAY = 1
 
 # Disable cookies (enabled by default)
@@ -58,9 +56,17 @@ DOWNLOAD_DELAY = 1
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    "beauty_helper.pipelines.BeautyHelperPipeline": 300,
-#}
+ITEM_PIPELINES = {
+    "beauty_helper.pipelines.BeautyHelperPipeline": 300,
+}
+
+# Bot çok hızlı gidip sunucuyu yormasın diye araya biraz bekleme ekleyelim
+DOWNLOAD_DELAY = 2  # Her sayfa arasında 2 saniye bekle
+CONCURRENT_REQUESTS = 1 # Aynı anda sadece 1 sayfa tara (Windows ve OneDrive için daha güvenli)
+
+# Hatalı sayfaları 3 kere tekrar dene
+RETRY_ENABLED = True
+RETRY_TIMES = 3
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
@@ -85,3 +91,14 @@ DOWNLOAD_DELAY = 1
 
 # Set settings whose default value is deprecated to a future-proof value
 FEED_EXPORT_ENCODING = "utf-8"
+
+# Output configuration
+FEEDS = {
+    'products.json': {
+        'format': 'json',
+        'encoding': 'utf8',
+        'store_empty': False,
+        'indent': 4,
+        'overwrite': True,
+    },
+}
