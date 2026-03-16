@@ -12,6 +12,7 @@ class ProductItem(scrapy.Item):
     description = scrapy.Field()
     rating = scrapy.Field()
     price = scrapy.Field()
+    stock = scrapy.Field()
     currency = scrapy.Field()
     production_year = scrapy.Field()
     stores = scrapy.Field()      # List of stores
