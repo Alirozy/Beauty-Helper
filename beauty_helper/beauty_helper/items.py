@@ -8,16 +8,17 @@ import scrapy
 class ProductItem(scrapy.Item):
     name = scrapy.Field()
     brand = scrapy.Field()
-    type = scrapy.Field()        # e.g., "Moisturizer", "Lipstick"
+    website = scrapy.Field()
+    type = scrapy.Field()        
     description = scrapy.Field()
-    rating = scrapy.Field()
-    price = scrapy.Field()
-    stock = scrapy.Field()
-    currency = scrapy.Field()
     production_year = scrapy.Field()
-    stores = scrapy.Field()      # List of stores
-    poster_url = scrapy.Field()  # Marketing image link
-    url = scrapy.Field()         # Source link
+    poster_url = scrapy.Field()  
+    stores_name = scrapy.Field() 
+    stores_url = scrapy.Field()  
+    price = scrapy.Field()
+    currency = scrapy.Field()
+    stock = scrapy.Field()    
+    rating = scrapy.Field()
 
 
     

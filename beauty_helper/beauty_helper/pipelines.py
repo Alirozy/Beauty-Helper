@@ -1,34 +1,143 @@
-# Define your item pipelines here
-#
-# Don't forget to add your pipeline to the ITEM_PIPELINES setting
-# See: https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-
-
-# useful for handling different item types with a single interface
-from itemadapter import ItemAdapter
-
+import psycopg2
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 
 class BeautyHelperPipeline:
-    def process_item(self, item, spider):
-        adapter = ItemAdapter(item)
+    def __init__(self):
+        # 1. .env dosyasını kök dizinden (3 üst klasör) yükle
+        base_dir = Path(__file__).resolve().parent.parent.parent
+        env_path = base_dir / '.env'
+        load_dotenv(dotenv_path=env_path)
+
+        # 2. Değişkenleri ata (Varsayılan değerlerle birlikte)
+        self.hostname = os.getenv('DB_HOST', 'localhost')
+        self.username = os.getenv('DB_USER', 'postgres')
+        self.password = os.getenv('DB_PASSWORD')
+        self.database = os.getenv('DB_NAME')
+        self.port = os.getenv('DB_PORT', '5432')
         
-        # Strip whitespaces from all string fields
-        for field_name in adapter.field_names():
-            value = adapter.get(field_name)
-            if isinstance(value, str):
-                adapter[field_name] = value.strip()
-                
-        # Basic price cleaning if it exists
-        if adapter.get('price'):
-            try:
-                # Sadece $, \n ve ekstra boşlukları/yazıları temizle.
-                # Virgülü silmiyoruz çünkü TL'de ondalık ayırıcı olarak kullanılıyor (örn: 124,50)
-                clean_price = adapter['price'].replace('$', '').replace('\n', '').strip()
-                # ' TL' ve 'TL' yazılarını silebiliriz istersen
-                if clean_price.endswith('TL'):
-                    clean_price = clean_price.replace('TL', '').strip()
-                adapter['price'] = clean_price
-            except Exception:
-                pass
-                
+        self.connection = None
+        self.cur = None
+
+    def open_spider(self, spider):
+        """Spider açıldığında DB bağlantısını kurar ve tabloları hazırlar."""
+        try:
+            self.connection = psycopg2.connect(
+                host=self.hostname,
+                user=self.username,
+                password=self.password,
+                dbname=self.database,
+                port=self.port
+            )
+            self.cur = self.connection.cursor()
+            self._create_tables()
+            spider.log(f"PostgreSQL bağlantısı başarılı: {self.database}")
+        except Exception as e:
+            spider.log(f"Veritabanı bağlantı hatası: {e}")
+            raise e
+
+    def _create_tables(self):
+        """Tabloları sırasıyla ve ilişkileriyle oluşturur."""
+        queries = [
+            """
+            CREATE TABLE IF NOT EXISTS Brands(
+                id SERIAL PRIMARY KEY,
+                brand VARCHAR(255) UNIQUE NOT NULL,
+                website VARCHAR(255)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS Products(
+                id SERIAL PRIMARY KEY,
+                brand_id INT REFERENCES Brands(id) ON DELETE CASCADE,
+                name VARCHAR(500) UNIQUE NOT NULL,
+                type VARCHAR(255),
+                description TEXT,
+                production_year VARCHAR(50),
+                poster_url TEXT,
+                rating VARCHAR(50)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS Product_Sources(
+                id SERIAL PRIMARY KEY,
+                product_id INT REFERENCES Products(id) ON DELETE CASCADE,
+                store_name VARCHAR(255),
+                store_url TEXT UNIQUE NOT NULL,
+                price VARCHAR(100),
+                currency VARCHAR(50),
+                stok VARCHAR(50)
+            )
+            """
+        ]
+        for query in queries:
+            self.cur.execute(query)
+        self.connection.commit()
+
+    def process_item(self, item, spider):
+        """Veriyi temizler ve PostgreSQL'e atomik olarak kaydeder."""
+        try:
+            # --- 1. Brand İşlemi ---
+            brand_val = item.get('brand') or 'Unknown'
+            self.cur.execute("""
+                INSERT INTO Brands (brand, website)
+                VALUES (%s, %s)
+                ON CONFLICT (brand) DO UPDATE SET website = EXCLUDED.website
+                RETURNING id;
+            """, (brand_val, item.get('website', '')))
+            brand_id = self.cur.fetchone()[0]
+
+            # --- 2. Product İşlemi ---
+            name_val = item.get('name') or 'Unknown Product'
+            self.cur.execute("""
+                INSERT INTO Products (brand_id, name, type, description, production_year, poster_url, rating)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (name) DO UPDATE SET
+                    brand_id = EXCLUDED.brand_id,
+                    type = EXCLUDED.type,
+                    description = EXCLUDED.description,
+                    production_year = EXCLUDED.production_year,
+                    poster_url = EXCLUDED.poster_url,
+                    rating = EXCLUDED.rating
+                RETURNING id;
+            """, (
+                brand_id, name_val, 
+                item.get('type'), item.get('description'), 
+                item.get('production_year'), item.get('poster_url'), 
+                item.get('rating')
+            ))
+            product_id = self.cur.fetchone()[0]
+
+            # --- 3. Source İşlemi ---
+            self.cur.execute("""
+                INSERT INTO Product_Sources (product_id, store_name, store_url, price, currency, stok)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (store_url) DO UPDATE SET
+                    product_id = EXCLUDED.product_id,
+                    store_name = EXCLUDED.store_name,
+                    price = EXCLUDED.price,
+                    currency = EXCLUDED.currency,
+                    stok = EXCLUDED.stok;
+            """, (
+                product_id,
+                item.get('stores_name'),
+                item.get('stores_url'),
+                item.get('price'),
+                item.get('currency'),
+                item.get('stock')
+            ))
+
+            self.connection.commit()
+        except Exception as e:
+            self.connection.rollback() # Hata olursa işlemi geri al
+            spider.log(f"Veri yazma hatası: {e}")
+        
         return item
+
+    def close_spider(self, spider):
+        """Bağlantıları güvenli bir şekilde kapatır."""
+        if self.cur:
+            self.cur.close()
+        if self.connection:
+            self.connection.close()

@@ -50,16 +50,9 @@ class BeautySpider(scrapy.Spider):
             item['name'] = name.strip() if name else None
 
             # 2. SCRAPE PRICE
-            # Special handling for Gratis (merging fragmented price elements)
-            if domain == 'www.gratis.com' and 'price_container' in rules:
-                price_fragments = product.css(f"{rules['price_container']} *::text").getall()
-                combined_price = "".join([p.strip() for p in price_fragments if p.strip()])
-                item['price'] = combined_price if combined_price else None
-            else:
-                # Standard price scraping for other sites
-                price_selector = rules.get('price', '')
-                raw_price = product.css(price_selector).get()
-                item['price'] = raw_price.strip() if raw_price else None
+            price_selector = rules.get('price', '')
+            raw_price = product.css(price_selector).get()
+            item['price'] = raw_price.strip() if raw_price else None
 
             # 3. SCRAPE RATING (SVG Star Counting)
             if 'rating' in rules:
@@ -95,7 +88,22 @@ class BeautySpider(scrapy.Spider):
             
             # 5. SCRAPE PRODUCT URL
             link = product.css('a::attr(href)').get()
-            item['url'] = response.urljoin(link) if link else response.url
+            item['stores_url'] = response.urljoin(link) if link else response.url
+            
+            # Fill missing fields defined in items.py
+            item['brand'] = None
+            item['website'] = domain
+            item['type'] = None
+            item['description'] = None
+            item['production_year'] = None
+            item['currency'] = 'TRY'
+
+            if domain == 'www.guzellikdeposu.com':
+                item['stores_name'] = 'Güzellik Deposu'
+            elif domain == 'panterkozmetik.com':
+                item['stores_name'] = 'Panter Kozmetik'
+            else:
+                item['stores_name'] = domain
             
             # Yield item only if it has a valid name
             if item['name']:
