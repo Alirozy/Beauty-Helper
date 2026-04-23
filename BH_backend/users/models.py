@@ -4,7 +4,7 @@ from scrapy_app.models import Brands, Products, ProductSources
 
 class CustomUser(AbstractUser):
     email = models.EmailField(unique=True) # blank ve null default zaten yönetilir
-    phone_number = models.CharField(max_length=15, blank=True, null=True)
+    phone_number = models.CharField(unique=True, max_length=15, blank=True, null=True)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True)
 
     def __str__(self):

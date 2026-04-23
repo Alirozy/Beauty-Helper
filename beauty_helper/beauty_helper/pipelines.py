@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 
 class BeautyHelperPipeline:
     def __init__(self):
-        # 1. .env dosyasını kök dizinden (3 üst klasör) yükle
+        # 1. Load the .env file from the root directory (3 folders up)
         base_dir = Path(__file__).resolve().parent.parent.parent
         env_path = base_dir / '.env'
         load_dotenv(dotenv_path=env_path)
 
-        # 2. Değişkenleri ata (Varsayılan değerlerle birlikte)
+        # 2. Assign variables (with default values)
         self.hostname = os.getenv('DB_HOST', 'localhost')
         self.username = os.getenv('DB_USER', 'postgres')
         self.password = os.getenv('DB_PASSWORD')
@@ -21,7 +21,7 @@ class BeautyHelperPipeline:
         self.cur = None
 
     def open_spider(self, spider):
-        """Spider açıldığında DB bağlantısını kurar ve tabloları hazırlar."""
+        """Establishes DB connection and prepares tables when Spider starts."""
         try:
             self.connection = psycopg2.connect(
                 host=self.hostname,
@@ -32,13 +32,13 @@ class BeautyHelperPipeline:
             )
             self.cur = self.connection.cursor()
             self._create_tables()
-            spider.log(f"PostgreSQL bağlantısı başarılı: {self.database}")
+            spider.log(f"PostgreSQL connection successful: {self.database}")
         except Exception as e:
-            spider.log(f"Veritabanı bağlantı hatası: {e}")
+            spider.log(f"Database connection error: {e}")
             raise e
 
     def _create_tables(self):
-        """Tabloları sırasıyla ve ilişkileriyle oluşturur."""
+        """Creates tables sequentially with relationships."""
         queries = [
             """
             CREATE TABLE IF NOT EXISTS Brands(
@@ -67,7 +67,7 @@ class BeautyHelperPipeline:
                 store_url TEXT UNIQUE NOT NULL,
                 price VARCHAR(100),
                 currency VARCHAR(50),
-                stok VARCHAR(50)
+                stock VARCHAR(50)
             )
             """
         ]
@@ -76,9 +76,9 @@ class BeautyHelperPipeline:
         self.connection.commit()
 
     def process_item(self, item, spider):
-        """Veriyi temizler ve PostgreSQL'e atomik olarak kaydeder."""
+        """Cleans the data and saves it to PostgreSQL atomically."""
         try:
-            # --- 1. Brand İşlemi ---
+            # --- 1. Brand Operation ---
             brand_val = item.get('brand') or 'Unknown'
             self.cur.execute("""
                 INSERT INTO Brands (brand, website)
@@ -88,7 +88,7 @@ class BeautyHelperPipeline:
             """, (brand_val, item.get('website', '')))
             brand_id = self.cur.fetchone()[0]
 
-            # --- 2. Product İşlemi ---
+            # --- 2. Product Operation ---
             name_val = item.get('name') or 'Unknown Product'
             self.cur.execute("""
                 INSERT INTO Products (brand_id, name, type, description, production_year, poster_url, rating)
@@ -109,16 +109,16 @@ class BeautyHelperPipeline:
             ))
             product_id = self.cur.fetchone()[0]
 
-            # --- 3. Source İşlemi ---
+            # --- 3. Source Operation ---
             self.cur.execute("""
-                INSERT INTO Product_Sources (product_id, store_name, store_url, price, currency, stok)
+                INSERT INTO Product_Sources (product_id, store_name, store_url, price, currency, stock)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (store_url) DO UPDATE SET
                     product_id = EXCLUDED.product_id,
                     store_name = EXCLUDED.store_name,
                     price = EXCLUDED.price,
                     currency = EXCLUDED.currency,
-                    stok = EXCLUDED.stok;
+                    stock = EXCLUDED.stock;
             """, (
                 product_id,
                 item.get('stores_name'),
@@ -130,13 +130,13 @@ class BeautyHelperPipeline:
 
             self.connection.commit()
         except Exception as e:
-            self.connection.rollback() # Hata olursa işlemi geri al
-            spider.log(f"Veri yazma hatası: {e}")
+            self.connection.rollback() # Rollback the operation if an error occurs
+            spider.log(f"Data write error: {e}")
         
         return item
 
     def close_spider(self, spider):
-        """Bağlantıları güvenli bir şekilde kapatır."""
+        """Closes connections securely."""
         if self.cur:
             self.cur.close()
         if self.connection:
