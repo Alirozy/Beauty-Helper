@@ -14,8 +14,7 @@ class ProductSourceSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     # To include brand and sources details in the JSON response:
     brand = BrandSerializer(read_only=True)
-    # Using the default related_name for the ProductSources model
-    sources = ProductSourceSerializer(many=True, read_only=True, source='productsources_set')
+    sources = ProductSourceSerializer(many=True, read_only=True)
 
     class Meta:
         model = Products

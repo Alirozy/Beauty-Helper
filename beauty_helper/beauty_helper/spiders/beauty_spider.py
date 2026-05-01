@@ -15,20 +15,12 @@ class BeautySpider(scrapy.Spider):
             'stock_status': '.sold-out-label span::text',
             'next_page': 'a:has(i.fa-chevron-right)::attr(href)'
         },
-        'panterkozmetik.com': {  
-            'container': 'li.product', 
-            'name': '.product-title a::text',
-            'price': 'span.woocommerce-Price-amount bdi::text',
-            'image': 'img.attachment-shop_catalog::attr(src)',
-            'next_page': 'a.next.page-numbers::attr(href)'
-        },
     }
 
     # STEP 2: Define starting URLs
     start_urls = [
-        'https://panterkozmetik.com/kozmetik-urunleri/',
-        'https://www.guzellikdeposu.com/kategori/tum-urunler',
-    ]
+            'https://www.guzellikdeposu.com/kategori/tum-urunler',
+    ]       
 
     def parse(self, response):
         # Identify the domain to apply the correct rules
@@ -52,7 +44,10 @@ class BeautySpider(scrapy.Spider):
             # 2. SCRAPE PRICE
             price_selector = rules.get('price', '')
             raw_price = product.css(price_selector).get()
-            item['price'] = raw_price.strip() if raw_price else None
+            if "tl" in raw_price.lower():
+                item['currency'] = 'TRY'
+                raw_price = raw_price.lower().replace('tl', '').strip()
+                item['price'] = raw_price if raw_price else None
 
             # 3. SCRAPE RATING (SVG Star Counting)
             if 'rating' in rules:
@@ -96,12 +91,11 @@ class BeautySpider(scrapy.Spider):
             item['type'] = None
             item['description'] = None
             item['production_year'] = None
-            item['currency'] = 'TRY'
 
             if domain == 'www.guzellikdeposu.com':
                 item['stores_name'] = 'Güzellik Deposu'
-            elif domain == 'panterkozmetik.com':
-                item['stores_name'] = 'Panter Kozmetik'
+#            elif domain == 'panterkozmetik.com':
+#                item['stores_name'] = 'Panter Kozmetik'
             else:
                 item['stores_name'] = domain
             

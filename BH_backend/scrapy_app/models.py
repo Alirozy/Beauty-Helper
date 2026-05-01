@@ -26,12 +26,19 @@ class Products(models.Model):
 
 class ProductSources(models.Model):
     id = models.AutoField(primary_key=True)
-    product = models.ForeignKey(Products, models.DO_NOTHING, db_column='product_id', blank=True, null=True)
+    product = models.ForeignKey(
+        Products,
+        models.DO_NOTHING,
+        db_column='product_id',
+        blank=True,
+        null=True,
+        related_name='sources',
+    )
     store_name = models.CharField(max_length=255, blank=True, null=True)
     store_url = models.TextField(unique=True, blank=True, null=True)
     price = models.CharField(max_length=100, blank=True, null=True)
     currency = models.CharField(max_length=50, blank=True, null=True)
-    stock = models.CharField(max_length=50, blank=True, null=True, db_column='stok')
+    stock = models.CharField(max_length=50, blank=True, null=True, db_column='stock')
 
     class Meta:
         managed = False

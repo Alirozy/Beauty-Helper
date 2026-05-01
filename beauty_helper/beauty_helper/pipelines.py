@@ -2,6 +2,7 @@ import psycopg2
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from scrapy.exceptions import DropItem
 
 class BeautyHelperPipeline:
     def __init__(self):
@@ -23,6 +24,9 @@ class BeautyHelperPipeline:
     def open_spider(self, spider):
         """Establishes DB connection and prepares tables when Spider starts."""
         try:
+            if not self.database:
+                raise ValueError("DB_NAME is required for pipeline connection.")
+
             self.connection = psycopg2.connect(
                 host=self.hostname,
                 user=self.username,
@@ -35,7 +39,7 @@ class BeautyHelperPipeline:
             spider.log(f"PostgreSQL connection successful: {self.database}")
         except Exception as e:
             spider.log(f"Database connection error: {e}")
-            raise e
+            raise
 
     def _create_tables(self):
         """Creates tables sequentially with relationships."""
@@ -73,11 +77,34 @@ class BeautyHelperPipeline:
         ]
         for query in queries:
             self.cur.execute(query)
+
+        # Backward compatibility: older schema may use "stok" column.
+        self.cur.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'product_sources' AND column_name = 'stok'
+                ) AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'product_sources' AND column_name = 'stock'
+                ) THEN
+                    ALTER TABLE product_sources RENAME COLUMN stok TO stock;
+                END IF;
+            END $$;
+        """)
+
         self.connection.commit()
 
     def process_item(self, item, spider):
         """Cleans the data and saves it to PostgreSQL atomically."""
         try:
+            store_url = item.get('stores_url')
+            if not store_url:
+                raise DropItem("Item dropped because stores_url is missing.")
+
             # --- 1. Brand Operation ---
             brand_val = item.get('brand') or 'Unknown'
             self.cur.execute("""
@@ -122,18 +149,19 @@ class BeautyHelperPipeline:
             """, (
                 product_id,
                 item.get('stores_name'),
-                item.get('stores_url'),
+                store_url,
                 item.get('price'),
                 item.get('currency'),
                 item.get('stock')
             ))
 
             self.connection.commit()
+            return item
         except Exception as e:
-            self.connection.rollback() # Rollback the operation if an error occurs
+            if self.connection:
+                self.connection.rollback() # Rollback the operation if an error occurs
             spider.log(f"Data write error: {e}")
-        
-        return item
+            raise
 
     def close_spider(self, spider):
         """Closes connections securely."""
